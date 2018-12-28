@@ -1,0 +1,759 @@
+---
+title: "Analysis of Categorical Data - Assignment - Phase 2"
+author: "Amal Joy (s3644794) & Nupura Sanjay Sawle (s3639703)"
+date: "14 October 2018"
+output:
+  pdf_document: 
+    fig_caption: yes
+    number_sections: yes
+    toc: no
+    toc_depth: 3
+  html_document:
+    df_print: paged
+    toc: no
+    toc_depth: '3'
+linkcolor: blue
+references:
+- author:
+  - family: Xie
+    given: YiHui
+    issued:
+    - year: 2018
+    publisher: RMIT University
+    title: Dynamic Documents with R and knitr
+  id: knitr
+subtitle: MATH 1298 Analysis of Categorical Data Project Phase II
+documentclass: article
+---
+
+\newpage
+
+\tableofcontents
+
+\newpage
+
+# Introduction \label{sec1}
+
+The aim of this project is to build a customer churn model for a telecommunication company to predict the customers who are about to get churned so that they can implement different business strategies to retain those customers before they actually get churned. The tool that I am using for this analysis is R-studio. This project was be conducted in 2 different phase where I went through exploring different data analysis techniques to accurately predict the churned customers. Phase 1 of this project will included the detailed descriptive statistical analysis of the data by making use of various R packages to build relevant charts, graphs, and interactions etc. Data preprocessing was be done to clean and transform the data to suit the prediction model.
+
+In this second phase of this project we are building the  model after checking  appropriate statistical procedures, the test of independence etc. The relevence and independence of different variables are explored using confidence intervals and hypothesis analysis. The dataset was completely analysed for different assumptions made for the purpose of this project.
+
+# Dataset source and description
+
+The following packages are used in this report for data preparation and data modeling.
+```{r warning=FALSE, message=FALSE}
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(package = binom)
+library(caret)
+library(MASS)
+library(car)
+```
+
+The data was read into a data file named 'telcom_churn'. Null values are replaced with 'NA' while reading the file.
+
+```{r}
+setwd("/Users/amaljoy/Study/Categorcal Data/Assignment 2/")
+telcom_churn <- read.csv(
+  "/Users/amaljoy/Study/Categorcal Data/Assignment 2/Telco-Customer-Churn.csv", 
+  header=T,na.strings=c("","NA")) # Reading the data
+
+dim(telcom_churn) # dimensions of the dataset
+```
+
+The dataset consists of 21 variables and 7043 observations. Each row in the dataset is the attributes associated to a customer, each column contains customer’s attributes. The customer attributes are provided below:
+* customerID (Unique customer identification)  
+* gender (female, male)  
+* SeniorCitizen (Whether the customer is a senior citizen or not (1, 0))  
+* Partner (Whether the customer has a partner or not (Yes, No))  
+* Dependents (Whether the customer has dependents or not (Yes, No))  
+* tenure (Number of months the customer has stayed with the company)  
+* PhoneService (Whether the customer has a phone service or not (Yes, No))  
+* MultipleLines (Whether the customer has multiple lines r not (Yes, No, No phone service)  
+* InternetService (Customer’s internet service provider (DSL, Fiber optic, No)  
+* OnlineSecurity (Whether the customer has online security or not (Yes, No, No internet service)  
+* OnlineBackup (Whether the customer has an online backup or not (Yes, No, No internet service)  
+* DeviceProtection (Whether the customer has device protection or not (Yes, No, No internet service)  
+* TechSupport (Whether the customer has tech support or not (Yes, No, No internet service)  
+* streamingTV (Whether the customer has streaming TV or not (Yes, No, No internet service)  
+* streamingMovies (Whether the customer has streaming movies or not (Yes, No, No internet service)  
+* Contract (The contract term of the customer (Month-to-month, One year, Two year)  
+* Paperless billing (Whether the customer has paperless billing or not (Yes, No))  
+* PaymentMethod (The customer’s payment method (Electronic check, Mailed check, Bank transfer (automatic), Credit card (automatic)))  
+* MonthlyCharges (The amount charged to the customer monthly - numeric)  
+* TotalCharges (The total amount charged to the customer - numeric)  
+* Churn ( Whether the customer churned or not (Yes or No))  
+
+The attribute churn will be the target variable. Given below is the first 5 observations in the dataset.
+
+```{r echo=FALSE}
+# Displaying heads of the table
+kable(head(telcom_churn[,1:8]), caption = "Head of the data") %>%
+  kable_styling("striped", full_width = T,
+                bootstrap_options = c("striped", "hover","condensed"),
+                latex_options = "HOLD_position",position = "center",
+                                      font_size = 9) %>%
+  row_spec(0, angle = 0,font_size = 7,bold = T, background = "#FAE5D3") %>%
+  kableExtra::column_spec(1:8, border_right = T)
+
+kable(head(telcom_churn[,9:14])) %>%
+  kable_styling("striped", full_width = T,
+                bootstrap_options = c("striped", "hover","condensed"),
+                latex_options = "HOLD_position",position = "center",
+                font_size = 9) %>%
+  row_spec(0, angle = 0,font_size = 7,bold = T, background = "#FAE5D3") %>%
+  column_spec(1:6, border_right = T)
+
+kable(head(telcom_churn[,15:21])) %>%
+  kable_styling("striped", full_width = T,
+                bootstrap_options = c("striped", "hover","condensed"),
+                latex_options = "HOLD_position",position = "center",
+                font_size = 9) %>%
+  row_spec(0, angle = 0,font_size = 7,bold = T, background = "#FAE5D3") %>%
+  column_spec(1:6, border_left = T)
+```
+
+## Summary Statistics
+
+Summary of the dataset is given below. It shows the summary of each variable including the levels in case of factors; range and central tendency values in case of numerical values.
+```{r}
+# Summary of the data
+summary(telcom_churn)
+```
+
+# Data Preprocessing
+
+All of the data preprocessing tasks completed in the phase I of this project is briefed here.
+'SeniorCitizen' has to be converted to a factor. It is labeled as 'Yes', and 'No'.
+
+```{r}
+telcom_churn$SeniorCitizen= factor(telcom_churn$SeniorCitizen, c(0,1), labels = c('No','Yes'),
+                                   ordered = is.ordered(telcom_churn))
+```
+
+We cannot consider the attributes of a recent customer to train the model. For the stability of the model and better accuracy, we are considering only those customers who are customers of telco for at least 1 year, i.e 12 months. 
+
+```{r}
+telcom_churn <- subset(telcom_churn,telcom_churn$tenure>12) # creating new subset
+```
+Now we have 4857 churned/active customers who are with telco for more than one year.
+
+To reduce the Curse of Dimensionality and the time required to train the algorithm, we chose to factorise the variable 'tenure' in to 5 different groups; 13-24 months, 25-36 months, 37-48 months, 49-60 months, and 61-72 months. 
+```{r}
+telcom_churn$tenure <- cut(telcom_churn$tenure,breaks=5,dig.lab=2,labels=2:6)
+```
+
+\pagebreak
+
+# Modeling
+
+## Confident Intervals
+Before performing the regression, lets analyse the target variable. The probability of any customer getting churned is to be calculated and its confidence limit is to be determined.
+```{r}
+# as.numeric(table(telcom_churn$Churn)[2])
+w<-sum(telcom_churn$Churn=="Yes") # Number of customers who got churned
+n<-length(telcom_churn$Churn) # Total number of customers
+alpha<-0.05 # 95% Confidence
+pi.hat<-w/n
+pi.hat # Point probability of getting churned
+
+binom.confint(x = w, n = n, conf.level = 1-alpha, methods = "all") # Confident interval methods
+```
+
+With 95% of confidence, the true probability of a customer getting churned, given by various methods are between the lower and upper limits provided in the above table. It can be noted that almost all of the methods give nearly the same amount of confidence limit. However, since the number of observations are well beyond 40, we can go for Agresti-Coull confidence limits for which 95% confidence interval is 0.161 < $\pi$ < 0.182.
+
+## Contigency table
+All the variables that we have in the dataset may not be relevent in deciding the churn tendency of the customer. Some of them may hardly give any information to the model. To reduce the curse of dimentionality, we may remove the variables that are not relevant from the analysis. For this purpose we are looking for the confidence limit of difference between two probabilities.
+
+### Gender
+We have noticed from the gender vs churn bar plot from the phase I that plot is identical for male and female customers. The plot is given below.
+```{r}
+# Analysing Gender variable
+ggplot(telcom_churn, aes(gender, ..count..,fill = Churn)) +
+geom_bar(stat="count", position = "dodge") +
+scale_fill_brewer(palette="Paired") +
+ggtitle("Gender Vs Churn Plot") +
+theme(plot.title = element_text(hjust = 0.5)) +
+geom_text(aes(label=..count..),
+          stat="count",position=position_dodge(0.5),vjust=-0.2)
+```
+If there is not much difference between the male and female customers in getting churned this variable can hardly provide any information about the churn tendency of the customers. A contigency table is constructed for the variables gender and churn.
+
+```{r}
+YF <- sum(telcom_churn$Churn=="Yes" & telcom_churn$gender=="Female")
+YM <- sum(telcom_churn$Churn=="Yes" & telcom_churn$gender=="Male")
+NF <- sum(telcom_churn$Churn=="No" & telcom_churn$gender=="Female")
+NM <- sum(telcom_churn$Churn=="No" & telcom_churn$gender=="Male")
+
+c.table<-array(data = c(YF,YM,NF,NM), 
+               dim = c(2,2), 
+               dimnames = list(gender = c("Female", "Male"),
+               Churn = c("Yes", "No")))
+c.table
+ifelse(sum(c.table)==length(telcom_churn$Churn),
+       "Contingency table includes all the observations",
+       "Contigency Table Made is not correct")
+
+# Find the estimated pi^j
+pi.hat.table<-c.table/rowSums(c.table)
+pi.hat.table
+```
+
+`r round(pi.hat.table[1],4)*100` % of female customers got churned and `r round(pi.hat.table[2],4)*100` % male customers got churned. While `r round(pi.hat.table[3],4)*100` % females are still active customers, `r round(pi.hat.table[4],4)*100` % of the males customers are active with Telco.
+
+So now we have to check if there is a difference between the proportion of males and females who got churned. For that purpose we will consider both Wald and Agresti-Caffo confidence intervals. 
+
+```{r}
+# Confidence interval for difference of two probabilities
+alpha<-0.05
+pi.hat1<-pi.hat.table[1,1] # Proportion of female customers who got churned
+pi.hat2<-pi.hat.table[2,1] # Proportion of male customers who got churned
+
+# Wald CI
+var.wald<-pi.hat1*(1-pi.hat1) / sum(c.table[1,]) + pi.hat2*(1-pi.hat2) / sum(c.table[2,])
+wal1 <- pi.hat1 - pi.hat2 + qnorm(p = c(alpha/2, 1-alpha/2)) * sqrt(var.wald)
+wal1
+```
+
+Therefore 95% Wald confidence interval is `r round(wal1[1],4)` < $\pi_1-\pi_2$ < `r round(wal1[2],4)`. Since this interval include zero, there is no sufficient evidence to indicate the difference in the proportions of male and female customers who got churned.
+
+```{r}
+# Agresti-Caffo CI
+pi.tilde1<-(c.table[1,1]+1)/(sum(c.table[1,])+2)
+pi.tilde2<-(c.table[2,1]+1)/(sum(c.table[2,])+2)
+var.AC<-pi.tilde1*(1-pi.tilde1) / (sum(c.table[1,])+2) + 
+  pi.tilde2*(1-pi.tilde2) / (sum(c.table[2,])+2)
+agc1 <- pi.tilde1 - pi.tilde2 + qnorm(p = c(alpha/2, 1-alpha/2)) * sqrt(var.AC)
+agc1
+```
+
+Therefore 95% Agresti-Caffo confidence interval is `r round(agc1[1],4)` < $\pi_1-\pi_2$ < `r round(agc1[2],4)`. Since this interval include zero, there is no sufficient evidence to indicate the difference in the proportions of male and female customers who got churned. Since both the confidence intervals at 90% confidence, failed to prove any difference in the proportion of male and female customers who got churned, we will proceed with the hypothesis test to determine whether to include this variable in the regression model. The hypothesis is given below:    
+$$
+\begin{aligned}
+  H_o:\pi_{female}-\pi_{male}=0 \\
+  H_a:\pi_{female}-\pi_{male}\neq0 
+\end{aligned}
+$$   
+
+
+```{r}
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = c.table, conf.level = 0.90, correct = FALSE)
+```
+Note that the the p-value = 0.7721 and $X^2=Z_0^2=0.083922$. Root of $Z_0=\sqrt{0.083922}=0.289693$. Since $-1.645<0.289693<1.645$ we failed to reject $H_0$ when $\alpha=0.1$. Also the wald confidence interval at 90% confidence level (-0.02091671 < 0 < 0.01465185) include zero. There is not sufficient evidence to conclude that the probability of female getting churned is different than probability of male getting churned. So we remove the variable from the analysis.
+
+### Phone Service
+We have noticed from the Phone Service vs churn bar plot from the phase I that the ratio of churned and non-churned customers are similar for the customers using the phone service and those customers not using the phone service. The plot is given below.
+```{r}
+ggplot(telcom_churn, aes(PhoneService,fill=Churn)) +
+geom_bar(stat="count", position = "dodge") +
+scale_fill_brewer(palette="Paired") +
+ggtitle("Phone Service Vs Churn Plot") +
+theme(plot.title = element_text(hjust = 0.5)) +
+geom_text(aes(label=..count..),
+stat="count",position=position_dodge(0.5),vjust=-0.2)
+```
+
+If there is not much difference in probability getting churned between the customers using the phone service and those customers not using the phone service, this variable can hardly provide any information about the churn tendency of the customers. A contigency table is constructed for the variables PhoneService and churn.
+```{r}
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$PhoneService=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$PhoneService=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$PhoneService=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$PhoneService=="No")
+
+ps.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(PhoneService = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+ps.table
+ifelse(sum(ps.table)==length(telcom_churn$Churn),
+       "Contingency table includes all the observations",
+       "Contigency Table Made is not correct")
+
+# Find the estimated pi^j
+pi.hat.table.ps<-ps.table/rowSums(ps.table)
+pi.hat.table.ps
+```
+
+`r round(pi.hat.table.ps[1],4)*100` % of customers with phone servide got churned and `r round(pi.hat.table.ps[2],4)*100` % customers without phone service got churned. While `r round(pi.hat.table.ps[3],4)*100` % phone service customers are still active, `r round(pi.hat.table.ps[4],4)*100` % of the customers without phone service are active with Telco.
+
+So now we have to check if there is a difference between the proportion of with and without phone service who got churned. For that purpose we will consider both Wald and Agresti-Caffo confidence intervals. 
+
+```{r}
+# Confidence interval for difference of two probabilities
+alpha<-0.05
+pi.hat1.ps<-pi.hat.table.ps[1,1] # Proportion of customers using phone service who got churned
+pi.hat2.ps<-pi.hat.table[2,1] # Proportion of customers not using phone service who got churned
+
+# Wald CI
+var.wald<-pi.hat1.ps*(1-pi.hat1.ps) / sum(ps.table[1,]) + pi.hat2.ps*(1-pi.hat2.ps) / sum(ps.table[2,])
+wal1 <- pi.hat1.ps - pi.hat2.ps + qnorm(p = c(alpha/2, 1-alpha/2)) * sqrt(var.wald)
+wal1
+```
+
+Therefore 95% Wald confidence interval is `r round(wal1[1],4)` < $\pi_1-\pi_2$ < `r round(wal1[2],4)`. Since this interval include zero, there is no sufficient evidence to indicate the difference in the proportions of churned customers using phone service and churned customers who are not using phone service.
+
+```{r}
+# Agresti-Caffo CI
+pi.tilde1<-(ps.table[1,1]+1)/(sum(ps.table[1,])+2)
+pi.tilde2<-(ps.table[2,1]+1)/(sum(ps.table[2,])+2)
+var.AC<-pi.tilde1*(1-pi.tilde1) / (sum(ps.table[1,])+2) + 
+  pi.tilde2*(1-pi.tilde2) / (sum(ps.table[2,])+2)
+agc1 <- pi.tilde1 - pi.tilde2 + qnorm(p = c(alpha/2, 1-alpha/2)) * sqrt(var.AC)
+agc1
+```
+
+Therefore 95% Agresti-Caffo confidence interval is `r round(agc1[1],4)` < $\pi_1-\pi_2$ < `r round(agc1[2],4)`.  Since this interval include zero, there is no sufficient evidence to indicate the difference in the proportions of churned customers using phone service and churned customers who are not using phone service. Since both the confidence intervals failed to prove any difference in the proportion of both types of customers, we will proceed with the hypothesis test with 90 % confidence limit to determine whether to include this variable in the regression model. The hypothesis is given below:    
+$$
+\begin{aligned}
+  H_o:\pi_{Phone}-\pi_{No Phone}=0 \\
+  H_a:\pi_{Phone}-\pi_{No Phone}\neq0 
+\end{aligned}
+$$   
+
+
+```{r}
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = ps.table, conf.level = 0.90, correct = FALSE)
+```
+Note that the the p-value = 0.1104 and $X^2=Z_0^2=2.5492$. Root of $Z_0=\sqrt{2.5492}=1.596621$. Since $-1.645<1.596621<1.645$ we failed to reject $H_0$ when $\alpha=0.1$. Eventhough the wald confidence interval at 90% confidence level (0.0009009569 < w < 0.0578842902) does not include zero, its lower limit is almost equal to zero even at 90% confidence limit. There is not sufficient evidence to conclude that the probability of customers with phone service getting churned is different than probability of customers without phone service getting churned. So we remove the variable from the analysis.
+
+## Relative Risk
+
+Since difference in probabilities measures a quantity whose meaning changes according to the sizes of $\pi_1-\pi_2$, we would be interested in finding the relative risk of the variables by taking the ratio of two success probabilities.
+```{r}
+# Gender
+cat("The sample relative risk is", round(pi.hat1/pi.hat2, 4), "\n \n")
+```
+A customer getting churned is `r round(pi.hat1/pi.hat2, 4)` times as likely for females than for males.
+
+```{r}
+# Phone Service
+cat("The sample relative risk is", round(pi.hat1.ps/pi.hat2.ps, 4), "\n \n")
+```
+
+The probability of a customer getting churned is `r round(pi.hat1.ps/pi.hat2.ps, 4)` times as large for those customers using phone service than those who are not.
+
+### Confidence interval
+The 95% confidence interval for the Relative risk for gender in customer churn in found as follows: 
+```{r}
+# Gender
+alpha<-0.05
+n1<-sum(c.table[1,])
+n2<-sum(c.table[2,])
+
+# Wald confidence interval for RR of gender and churn
+ci<-exp(log(pi.hat1/pi.hat2) + qnorm(p = c(alpha/2, 1-alpha/2)) *
+          sqrt((1-pi.hat1)/(n1*pi.hat1) + (1-pi.hat2)/(n2*pi.hat2)))
+round(ci, 4)  # relative risk for gender and churn
+rev(round(1/ci, 4))  # inverted relative risk for gender and churn
+```
+Since the relative risk of the gender and churn include 1, we confirm our analysis that gender is not suffieciently explaining the variability in churn tendency of a customer.
+
+```{r}
+# Phone Service
+alpha<-0.05
+n1<-sum(ps.table[1,])
+n2<-sum(ps.table[2,])
+
+# Wald confidence interval for RR of Phone service and churn
+ci.ps<-exp(log(pi.hat1.ps/pi.hat2.ps) + qnorm(p = c(alpha/2, 1-alpha/2)) *
+          sqrt((1-pi.hat1.ps)/(n1*pi.hat1.ps) + (1-pi.hat2.ps)/(n2*pi.hat2.ps)))
+round(ci.ps, 4)  # relative risk for Phone service and churn
+rev(round(1/ci.ps, 4))  # inverted relative risk for Phone service and churn
+```
+Since the relative risk of the phone service and churn include 1, we confirm our analysis that phone service is not suffieciently explaining the variability in churn tendency of a customer.
+
+## Odds Ratio
+By calculating the odds ratio which is the probability of success by probability of failure, we can estimate how large is the odds of a customer getting churned for different groups. If we take the case of Senior citizens, we can calculate how large is the odds of a senior citizen getting churned compared non-senior citizen. For that purpose we have to create a contingency table including variables 'SeniorCitizens' and 'churn'. 
+```{r}
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$SeniorCitizen=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$SeniorCitizen=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$SeniorCitizen=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$SeniorCitizen=="No")
+
+sc.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(SeniorCitizen = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+sc.table
+ifelse(sum(sc.table)==length(telcom_churn$Churn),
+       "Contingency table includes all the observations",
+       "Contigency Table Made is not correct")
+
+# Find the estimated pi^j
+pi.hat.table.sc<-sc.table/rowSums(sc.table)
+pi.hat.table.sc
+```
+
+`r round(pi.hat.table[1],4)*100` % of senior citizen got churned and `r round(pi.hat.table[2],4)*100` % non-senior citizen got churned. While `r round(pi.hat.table[3],4)*100` % senior citizens are still active customers, `r round(pi.hat.table[4],4)*100` of the non senior citizen are active with Telco. 
+
+```{r}
+# Odds Ratio (OR)
+alpha <- 0.05
+OR.hat<-sc.table[1,1]*sc.table[2,2] / (sc.table[2,1]*sc.table[1,2])
+round(OR.hat, 2)
+round(1/OR.hat, 2) # Inverse of OR
+```
+This result can be interprested as the estimated odds of a customer getting churned are `r round(OR.hat, 2)` times as large as for senior citizens than for non-senior citizens. It can also be said that the estimated odds of a customer getting churned are `r round(1/OR.hat, 2)` times as large as in case of non-senior citizens than in case of senior citizens.
+
+### Confidence initerval
+The confidence interval of the odds ratio is caculated as follows. 
+```{r}
+var.log.or<-1/sc.table[1,1] + 1/sc.table[1,2] + 1/sc.table[2,1] + 1/sc.table[2,2]
+OR.CI<-exp(log(OR.hat) + qnorm(p = c(alpha/2, 1-alpha/2)) *
+             sqrt(var.log.or))
+round(OR.CI, 2)
+rev(round(1/OR.CI, 2))
+```
+The 95% confidence interval for OR is `r round(OR.CI, 2)[1]` < OR < `r round(OR.CI, 2)[2]` If the interval is inverted, the 95% confidence interval for 1/OR is `r rev(round(1/OR.CI, 2))[1]` < $1/OR$ < `r rev(round(1/OR.CI, 2))[2]`.
+
+
+## Test of independence for multinomial variables
+There are many multinomial variables in the dataset which needs to be analysed for their independence with each other. Most of these variables seems to have rebundant information as atleast one of their levels depends on the some other levels of a different variable. For that purpose we need to create a multinomial contigency table as shown below for the variables `PhoneService` and `MultipleLines`.
+```{r}
+# Multiple lines and phone service
+levels(telcom_churn$MultipleLines)
+YY <- sum(telcom_churn$PhoneService=="Yes" & telcom_churn$MultipleLines=="Yes")
+YN <- sum(telcom_churn$PhoneService=="Yes" & telcom_churn$MultipleLines=="No")
+YPS <- sum(telcom_churn$PhoneService=="Yes" & telcom_churn$MultipleLines=="No phone service")
+NY <- sum(telcom_churn$PhoneService=="No" & telcom_churn$MultipleLines=="Yes")
+NN <- sum(telcom_churn$PhoneService=="No" & telcom_churn$MultipleLines=="No")
+NPS <- sum(telcom_churn$PhoneService=="No" & telcom_churn$MultipleLines=="No phone service")
+
+multi.table1<-array(data = c(YY, NY, YN, NN, YPS, NPS), 
+               dim = c(2,3), 
+               dimnames = list(PhoneService = c("Yes", "No"),
+               MultipleLines = c("Yes", "No","No_P.S")))
+multi.table1
+
+ifelse(sum(multi.table1)==length(telcom_churn$MultipleLines),
+       "Contingency table includes all the observations",
+       "Contigency Table Made is not correct")
+
+chisq <- chisq.test(x = multi.table1, correct = FALSE) 
+chisq
+```
+Note the value $X^2=$ `r as.numeric(chisq$statistic[1])` and p-value using $X^2=$ is less than 2.2e-16. Because the p-value is extremely small, we reject the null hypothesis stating that values are independent. 
+
+So we see that the test of independence failed because of one category leaking information in to another. The information contained in the variable `PhoneService` and `MultipleLines` are rebundant. So we may have to remove the variable `PhoneService`.
+
+Similarly we check the independence for other variables as well. 
+```{r}
+# Multiple lines and phone service
+levels(telcom_churn$InternetService)
+levels(telcom_churn$OnlineSecurity)
+DY <- sum(telcom_churn$InternetService=="DSL" & telcom_churn$OnlineSecurity=="Yes")
+DN <- sum(telcom_churn$InternetService=="DSL" & telcom_churn$OnlineSecurity=="No")
+DNS <- sum(telcom_churn$InternetService=="DSL" & telcom_churn$OnlineSecurity=="No internet service")
+NY <- sum(telcom_churn$InternetService=="No" & telcom_churn$OnlineSecurity=="Yes")
+NN <- sum(telcom_churn$InternetService=="No" & telcom_churn$OnlineSecurity=="No")
+NNS <- sum(telcom_churn$InternetService=="No" & telcom_churn$OnlineSecurity=="No internet service")
+FY <- sum(telcom_churn$InternetService=="Fiber optic" & telcom_churn$OnlineSecurity=="Yes")
+FN <- sum(telcom_churn$InternetService=="Fiber optic" & telcom_churn$OnlineSecurity=="No")
+FNS <- sum(telcom_churn$InternetService=="Fiber optic" & telcom_churn$OnlineSecurity=="No internet service")
+
+multi.table2<-array(data = c(DY,NY,FY,DN,NN,FN,DNS,NNS,FNS), 
+               dim = c(3,3), 
+               dimnames = list(InternetService = c("DSL", "No", "Fiber optic" ),
+               OnlineSecurity = c("Yes", "No","No_I.S")))
+multi.table2
+
+ifelse(sum(multi.table2)==length(telcom_churn$OnlineSecurity),
+       "Contingency table includes all the observations",
+       "Contigency Table Made is not correct")
+
+chisq <- chisq.test(x = multi.table2, correct = FALSE) 
+chisq
+```
+Note the value $X^2=$ `r as.numeric(chisq$statistic[1])` and p-value using $X^2=$ is less than 2.2e-16. Because the p-value is extremely small, we reject the null hypothesis stating that values are independent. 
+
+So we see that the test of independence failed because of one category leaking information in to another. The information contained in the variable `InternetService` and `OnlineSecurity` are rebundant. People without internet service will not have any features associated with it. This includes features like `OnlineSecurity`, `OnlineBackup`, `DeviceProtection`, `TechSupport`, `StreamingTV`, and `StreamingMovies`. So we may have to merge these categories in these variables.
+```{r}
+# Merging Levels
+levels(telcom_churn$OnlineSecurity) <- list(Yes="Yes", No=c("No internet service", "No"))
+levels(telcom_churn$OnlineBackup) <- list(Yes="Yes", No=c("No internet service", "No"))
+levels(telcom_churn$DeviceProtection) <- list(Yes="Yes", No=c("No internet service", "No"))
+levels(telcom_churn$TechSupport) <- list(Yes="Yes", No=c("No internet service", "No"))
+levels(telcom_churn$StreamingTV) <- list(Yes="Yes", No=c("No internet service", "No"))
+levels(telcom_churn$StreamingMovies) <- list(Yes="Yes", No=c("No internet service", "No"))
+summary(telcom_churn)
+```
+Now all those variables are merged to form binary variables. We have to again create the contingency table for these binary variables to test the hypothesis on difference in probabilities. By this way we can determine if these variable explains the variation in the churn behaviour.
+
+```{r}
+# OnlineSecurity
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$OnlineSecurity=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$OnlineSecurity=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$OnlineSecurity=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$OnlineSecurity=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(OnlineSecurity = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+X.table
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+
+P-value is less than 0.05 and the 95% wald confidence interval doesnot include zero. This means that we failed to reject null hypothesis that there is no difference between the probabilities. So this variable is explaining some of the variability in the response variable.
+
+```{r}
+# OnlineBackup
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$OnlineBackup=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$OnlineBackup=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$OnlineBackup=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$OnlineBackup=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(OnlineBackup = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+X.table
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+
+Note that the the p-value = 0.8579 and $X^2=Z_0^2=0.032055$. We failed to reject $H_0$ when $\alpha=0.05$. The wald confidence interval at 95% confidence level include zero. There is not sufficient evidence to conclude that the probability of probabilities of these variables are different. So we remove the variable from the analysis.
+
+```{r}
+# DeviceProtection
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$DeviceProtection=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$DeviceProtection=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$DeviceProtection=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$DeviceProtection=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(DeviceProtection = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+X.table
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+Note that the the p-value = 0.8493 and $X^2=Z_0^2=0.036108$. We failed to reject $H_0$ when $\alpha=0.05$. The wald confidence interval at 95% confidence level include zero. There is not sufficient evidence to conclude that the probability of probabilities of these variables are different. So we remove the variable from the analysis.
+
+```{r}
+# TechSupport
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$TechSupport=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$TechSupport=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$TechSupport=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$TechSupport=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(TechSupport = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+X.table
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+P-value is less than 0.05 and the 95% wald confidence interval doesnot include zero. This means that we failed to reject null hypothesis that there is no difference between the probabilities. So this variable is explaining some of the variability in the response variable.
+
+```{r}
+# StreamingTV
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$StreamingTV=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$StreamingTV=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$StreamingTV=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$StreamingTV=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(StreamingTV = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+X.table
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+P-value is less than 0.05 and the 95% wald confidence interval doesnot include zero. This means that we failed to reject null hypothesis that there is no difference between the probabilities. So this variable is explaining some of the variability in the response variable.
+
+```{r}
+# StreamingMovies
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$StreamingMovies=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$StreamingMovies=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$StreamingMovies=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$StreamingMovies=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(StreamingMovies = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+X.table
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+P-value is less than 0.05 and the 95% wald confidence interval doesnot include zero. This means that we failed to reject null hypothesis that there is no difference between the probabilities. So this variable is explaining some of the variability in the response variable.
+
+Now we analyse the variable Total charges.
+```{r}
+# Correlation between Monthly charges + Tenure and Total charges
+cor(telcom_churn$TotalCharges,telcom_churn$MonthlyCharges)
+
+smpl <- data.frame(
+  Tenure=telcom_churn$tenure, 
+  MonthlyCharges=telcom_churn$MonthlyCharges, 
+  TotalCharges=telcom_churn$TotalCharges, 
+  CalulatedCharges=as.numeric(telcom_churn$tenure)*12*telcom_churn$MonthlyCharges)
+
+head(smpl,5)
+cor(smpl$TotalCharges,smpl$CalulatedCharges)
+```
+The correlation between the calculated fields produced from the variables `MonthlyCharges` and `Tenure` is extremely correlated tot the variable `TotalCharges`. So it happens that the Total charges is a calculated measure of Tenure and Monthly charges. This leaks duplicate information in to the dataset. So we remove this variable from the analysis.
+
+
+```{r}
+# Partner and dependents
+YY <- sum(telcom_churn$Partner=="Yes" & telcom_churn$Dependents=="Yes")
+YN <- sum(telcom_churn$Partner=="Yes" & telcom_churn$Dependents=="No")
+NY <- sum(telcom_churn$Partner=="No" & telcom_churn$Dependents=="Yes")
+NN <- sum(telcom_churn$Partner=="No" & telcom_churn$Dependents=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(Dependents = c("Yes", "No"),
+               Partner = c("Yes", "No")))
+X.table
+# C.I. and also hypothesis test for Ho: pi_1|1 - pi_1|2
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+P-value is less than 0.05 and the 95% wald confidence interval doesnot include zero. This means that we failed to reject null hypothesis that there is no difference between the probabilities. So this variable `Partner` is explaining some of the variability in the variable `Dependents`. This means that the variables may be giving rebundant information. 
+
+```{r}
+# Partner and dependents
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$Dependents=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$Dependents=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$Dependents=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$Dependents=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(Dependents = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+
+```{r}
+# Partner and dependents
+YY <- sum(telcom_churn$Churn=="Yes" & telcom_churn$Partner=="Yes")
+YN <- sum(telcom_churn$Churn=="Yes" & telcom_churn$Partner=="No")
+NY <- sum(telcom_churn$Churn=="No" & telcom_churn$Partner=="Yes")
+NN <- sum(telcom_churn$Churn=="No" & telcom_churn$Partner=="No")
+
+X.table<-array(data = c(YY,YN,NY,NN), 
+               dim = c(2,2), 
+               dimnames = list(Partner = c("Yes", "No"),
+               Churn = c("Yes", "No")))
+
+prop.test(x = X.table, conf.level = 0.95, correct = FALSE)
+```
+
+p-value of the variable `dependents` is much less than that of `partner`. Also wlad confidence interval is more close to zero for the variable `partner`. This may means that we are more confident is stating that the variable `dependents` explain some of the variability in churn than stating the same for `partner`.
+
+Since there is only one numerical variable in the model, it need not to be standardised. 
+
+# Logistic Regression
+Sampling the data in to training and testing.
+```{r}
+smp_size <- floor(0.75 * nrow(telcom_churn))
+
+## set the seed to make your partition reproducible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(telcom_churn)), size = smp_size)
+
+train <- telcom_churn[train_ind, ] # Training data set
+test <- telcom_churn[-train_ind, ] # Testing data set
+```
+
+## Model Building
+The model is buid using the Genaralised Linear Model with family as binomial and link as logit. All of those variables we have finalised for the model after initial analysis are included in to the model.
+```{r}
+mod.fit1<-glm(formula = Churn ~ SeniorCitizen + Dependents + tenure + MultipleLines + InternetService + OnlineSecurity + TechSupport + StreamingTV + StreamingMovies + Contract + PaperlessBilling + PaymentMethod + MonthlyCharges, 
+              family = binomial(link = logit), data = train)
+
+summary(mod.fit1) # Summary of the model
+```
+There are many coefficients for the model which are not significant. The function stepAIC from the mass package is used for variable selection. It is an iterative process  in which variables are added and removed, in order to get a subset of variables that gives the best performing model.
+
+```{r results=FALSE}
+mod.fit2<- stepAIC(mod.fit1, direction="both")
+
+summary(mod.fit2)
+```
+It is seen that many insignificant variables have been removed from the model. After various trial and error methods, the following model is considered as the final model for the evaluation. Trying to remove the variable `MonthlyCharges` also increased the significance of many other variables. But when this is used as an interaction term in the model, model is performing much better. Interaction is found between variables `MultipleLines` and `MonthlyCharges`. It makes sense as more the number of lines a customer is having more will be his monthly charges. The model is defined below.
+
+```{r}
+mod.fit3<-glm(formula = Churn ~ SeniorCitizen + tenure + InternetService + 
+    StreamingTV + StreamingMovies + Contract + PaperlessBilling + 
+     MultipleLines:MonthlyCharges, 
+              family = binomial(link = logit), data = train)
+
+summary(mod.fit3)
+
+```
+Now all the coefficients are significant at 95% confidence level. Other than the coefficient `SeniorCitizenYes` all other coefficients are significant atleast 99% confidence level. AIC (Akaike's Information Criteria) is high with AIC:2548, which is not that great sign. 
+
+## Hypothesis Tests
+```{r}
+round(summary(mod.fit3)$coefficients, 4)   # Wald tests
+
+anova(mod.fit3, test = "Chisq")  # Sequential testing of variables
+
+anova(mod.fit3, mod.fit1, test = "Chisq") #comparing two models
+```
+Analysis of Deviance Table shows the amount by which the model `mod.fit3` deviates from the model `mod.fit1`. The deviance is given as 21.342. Model `mod.fit3` deviates from the observed data by 2494.7 and model `mod.fit1` deviates from the observed data by 2516.0.
+
+# Model evaluation
+
+## Goodness of fit (GOF)  
+Residual measures are obtained for the model to check how well a model fits on the individual observations. 
+
+```{r}
+# Goodness-of-Fit Tests
+rdev <- mod.fit3$deviance  # deviance
+rdev
+dfr <- mod.fit3$df.residual # degree of freedom
+dfr
+
+ddf <- rdev/dfr # for a reasonable model this should not be far from 1
+ddf
+thresh2 <- 1 + 2*sqrt(2/dfr) 
+thresh3 <- 1 + 3*sqrt(2/dfr) 
+c(thresh2, thresh3)
+```
+The deviance for the model `mod.fit3` is given as `r rdev` and degree of freedom is given as `r dfr`. The rario of deviance and the degree of freedom is used to measure the goodness of the fit for the model, which is given as `r ddf`. To check if this is too far from 1 for the model created, we check this using the threshold values, `r c(thresh2, thresh3)`. Since `r ddf`<`r thresh2` and also `r ddf`<`r thresh3` the model is a good fit.
+
+# Prediction
+
+The model was then tested on the testing data and the predicted results were compared with the observed data. 
+```{r}
+linear.pred<-predict(object = mod.fit3, newdata = test, type = "link")
+pred <- data.frame(Real=test$Churn, predicted=ifelse(linear.pred<0.5, "No", "Yes"))
+confusionMatrix(pred$Real, pred$predicted)
+```
+The model was able to explain the 82.3% variability in the response variable. The 95% confidence interval of the model is given as 0.8004 and 0.8441. The positive class was taken as customers who have not churned as those are the customers we are interested in. 
+$$
+\begin{aligned}
+Sensitivity : 0.8232  \\        
+Specificity : 0.8000    \\      
+Positive Pred Value : 0.9980  \\        
+Negative Pred Value : 0.0362    \\      
+Prevalence : 0.9918          \\
+Detection Rate : 0.8165        \\  
+Balanced Accuracy : 0.8116 \\
+\end{aligned}
+$$  
+
+# Results and Discussion
+It was found that there were many variable with inter dependencies. Some variables were rebundant and were leaking duplicate information in to the model. Such variables were identified and removed. Variables like InternetService and PhoneService were already included in many other variables. Also it was found that some binary variables like PhoneService and Gender were not able to explain the variance in the response variable. Such variables were identified and removed. The variable SeniorCitizen was having the maximum effect on the response variable. It was able explain much of the variance in the response variable. Contigency tables were constructed for analysis of independence. Some multinomial variable were found to be independ of the response variable. The model was build using the most important identified variables. After many trial and error iterations, we came up with the final variable that also included an interaction term between multiple lines and monthly charges.  It makes sense as more the number of lines a customer is having more will be his monthly charges. The  model was evaluated using the goodness of the fit test. The deviance of the model was found to be `r rdev` and the ratio between the deviation and the degree of freedom was close to one, which proved that the model is well fitting the data. The prediction results showed that the model performance was satisfactory. 82.3 % of the variablity in the response variable was explained by the model. The sensitivity of the model was also very high reaching 82.32%. 
+
+
+# Conclusion
+The data had several issues including interdependency and duplicate information leaking in to other variables. The other issues identified included lack of independece, rebundant information and high correlation between some calculated fields. The model was build using the variables that were identified to be relevant for explaining the variance in the response variable. Various statistical techniques including cinfidence intervals, hypothesis analysis, tests for independence, Odds ratio were used at multi times in the analysis to get the best model. The model was satisfactory in predicting the churned and non churned customer in test dataset. 
+
+
+
+
